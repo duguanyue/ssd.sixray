@@ -9,8 +9,10 @@ import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
-from data import VOC_ROOT, VOCAnnotationTransform, VOCDetection, BaseTransform
-from data import VOC_CLASSES as labelmap
+#from data import VOC_ROOT, VOCAnnotationTransform, VOCDetection, BaseTransform
+#from data import VOC_CLASSES as labelmap
+from data import SIXrayAnnotationTransform, SIXrayDetection, BaseTransform, SIXray_CLASSES
+from data import SIXray_ROOT, SIXray_CLASSES as labelmap
 import torch.utils.data as data
 
 from ssd import build_ssd
@@ -36,7 +38,7 @@ def str2bool(v):
 parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Evaluation')
 parser.add_argument('--trained_model',
-                    default='weights/ssd300_mAP_77.43_v2.pth', type=str,
+                    default='weights/SIXRAY.pth', type=str,
                     help='Trained state_dict file path to open')
 parser.add_argument('--save_folder', default='eval/', type=str,
                     help='File path to save results')
@@ -44,14 +46,18 @@ parser.add_argument('--confidence_threshold', default=0.01, type=float,
                     help='Detection confidence threshold')
 parser.add_argument('--top_k', default=5, type=int,
                     help='Further restrict the number of predictions to parse')
-parser.add_argument('--cuda', default=True, type=str2bool,
+parser.add_argument('--cuda', default=False, type=str2bool,
                     help='Use cuda to train model')
-parser.add_argument('--voc_root', default=VOC_ROOT,
-                    help='Location of VOC root directory')
+parser.add_argument('--SIXray_root', default=SIXray_ROOT,
+                    help='Location of SIXray root directory')
+#parser.add_argument('--voc_root', default=VOC_ROOT,
+#                    help='Location of VOC root directory')
 parser.add_argument('--cleanup', default=True, type=str2bool,
                     help='Cleanup and remove results files following eval')
-
+# imgsetpath = os.path.join(args.voc_root, 'VOC2007', 'ImageSets', 'Main') + os.sep + '{:s}.txt'
 args = parser.parse_args()
+#imgsetpath = './data/sixray/1.txt'
+imgsetpath = "./data/sixray/train_3850.txt"
 
 if not os.path.exists(args.save_folder):
     os.mkdir(args.save_folder)
@@ -66,12 +72,18 @@ if torch.cuda.is_available():
 else:
     torch.set_default_tensor_type('torch.FloatTensor')
 
-annopath = os.path.join(args.voc_root, 'VOC2007', 'Annotations', '%s.xml')
-imgpath = os.path.join(args.voc_root, 'VOC2007', 'JPEGImages', '%s.jpg')
-imgsetpath = os.path.join(args.voc_root, 'VOC2007', 'ImageSets',
-                          'Main', '{:s}.txt')
-YEAR = '2007'
-devkit_path = args.voc_root + 'VOC' + YEAR
+
+annopath = os.path.join(args.SIXray_root, 'Annotation', '%s.txt')
+imgpath = os.path.join(args.SIXray_root, 'Image', '%s.jpg')
+
+#annopath = os.path.join(args.voc_root, 'VOC2007', 'Annotations', '%s.xml')
+#imgpath = os.path.join(args.voc_root, 'VOC2007', 'JPEGImages', '%s.jpg')
+#imgsetpath = os.path.join(args.voc_root, 'VOC2007', 'ImageSets',
+#                          'Main', '{:s}.txt')
+
+#YEAR = '2007'
+#devkit_path = args.voc_root + 'VOC' + YEAR
+devkit_path = './eval'
 dataset_mean = (104, 117, 123)
 set_type = 'test'
 
@@ -103,20 +115,53 @@ class Timer(object):
 
 def parse_rec(filename):
     """ Parse a PASCAL VOC xml file """
-    tree = ET.parse(filename)
+    filename = filename.replace('.xml', '.txt')
+
+    # imagename0 = filename.replace('Anno_core_coreless_battery_sub_2000_500', 'cut_Image_core_coreless_battery_sub_2000_500')
+
+    img_fold_name = imgpath.split('/')[-2]
+    imagename0 = filename.replace('Annotation', 'Image')
+    imagename1 = imagename0.replace('.txt', '.jpg')  # jpg form
+    imagename2 = imagename0.replace('.txt', '.jpg')
     objects = []
-    for obj in tree.findall('object'):
-        obj_struct = {}
-        obj_struct['name'] = obj.find('name').text
-        obj_struct['pose'] = obj.find('pose').text
-        obj_struct['truncated'] = int(obj.find('truncated').text)
-        obj_struct['difficult'] = int(obj.find('difficult').text)
-        bbox = obj.find('bndbox')
-        obj_struct['bbox'] = [int(bbox.find('xmin').text) - 1,
-                              int(bbox.find('ymin').text) - 1,
-                              int(bbox.find('xmax').text) - 1,
-                              int(bbox.find('ymax').text) - 1]
-        objects.append(obj_struct)
+    # 还需要同时打开图像，读入图像大小
+    img = cv2.imread(imagename1)
+    if img is None:
+        img = cv2.imread(imagename2)
+    height, width, channels = img.shape
+    with open(filename, "r", encoding='utf-8') as f1:
+        dataread = f1.readlines()
+        for annotation in dataread:
+            obj_struct = {}
+            temp = annotation.split()
+            name = temp[1]
+            if name != '带电芯充电宝' and name != '不带电芯充电宝':
+                continue
+            xmin = int(temp[2])
+            # 只读取V视角的
+            if int(xmin) > width:
+                continue
+            if xmin < 0:
+                xmin = 1
+            ymin = int(temp[3])
+            if ymin < 0:
+                ymin = 1
+            xmax = int(temp[4])
+            if xmax > width:
+                xmax = width - 1
+            ymax = int(temp[5])
+            if ymax > height:
+                ymax = height - 1
+            ##name
+            obj_struct['name'] = name
+            obj_struct['pose'] = 'Unspecified'
+            obj_struct['truncated'] = 0
+            obj_struct['difficult'] = 0
+            obj_struct['bbox'] = [float(xmin) - 1,
+                                  float(ymin) - 1,
+                                  float(xmax) - 1,
+                                  float(ymax) - 1]
+            objects.append(obj_struct)
 
     return objects
 
@@ -155,7 +200,7 @@ def write_voc_results_file(all_boxes, dataset):
                 # the VOCdevkit expects 1-based indices
                 for k in range(dets.shape[0]):
                     f.write('{:s} {:.3f} {:.1f} {:.1f} {:.1f} {:.1f}\n'.
-                            format(index[1], dets[k, -1],
+                            format(index, dets[k, -1],
                                    dets[k, 0] + 1, dets[k, 1] + 1,
                                    dets[k, 2] + 1, dets[k, 3] + 1))
 
@@ -165,13 +210,13 @@ def do_python_eval(output_dir='output', use_07=True):
     aps = []
     # The PASCAL VOC metric changed in 2010
     use_07_metric = use_07
-    print('VOC07 metric? ' + ('Yes' if use_07_metric else 'No'))
+    #print('VOC07 metric? ' + ('Yes' if use_07_metric else 'No'))
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
     for i, cls in enumerate(labelmap):
         filename = get_voc_results_file_template(set_type, cls)
         rec, prec, ap = voc_eval(
-           filename, annopath, imgsetpath.format(set_type), cls, cachedir,
+           filename, annopath, imgsetpath, cls, cachedir,
            ovthresh=0.5, use_07_metric=use_07_metric)
         aps += [ap]
         print('AP for {} = {:.4f}'.format(cls, ap))
@@ -372,11 +417,11 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
 
     # timers
     _t = {'im_detect': Timer(), 'misc': Timer()}
-    output_dir = get_output_dir('ssd300_120000', set_type)
+    output_dir = get_output_dir('eval/ssd300_120000', set_type)
     det_file = os.path.join(output_dir, 'detections.pkl')
 
     for i in range(num_images):
-        im, gt, h, w = dataset.pull_item(i)
+        im, gt, h, w, og_img = dataset.pull_item(i)
 
         x = Variable(im.unsqueeze(0))
         if args.cuda:
@@ -426,9 +471,11 @@ if __name__ == '__main__':
     net.eval()
     print('Finished loading model!')
     # load data
-    dataset = VOCDetection(args.voc_root, [('2007', set_type)],
+    #test_sets = "./data/sixray/test_1650.txt"
+    test_sets = imgsetpath
+    dataset = SIXrayDetection(test_sets,
                            BaseTransform(300, dataset_mean),
-                           VOCAnnotationTransform())
+                           SIXrayAnnotationTransform())
     if args.cuda:
         net = net.cuda()
         cudnn.benchmark = True

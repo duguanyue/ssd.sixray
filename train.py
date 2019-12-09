@@ -91,7 +91,7 @@ def train():
                                                          MEANS))
     '''
 
-    train_sets = "./data/sixray/train_3850.txt"
+    train_sets = "./data/sixray/all5500.txt"
     cfg = sixray
     dataset = SIXrayDetection(image_sets=train_sets,transform=SSDAugmentation(cfg['min_dim'], MEANS))
     if args.visdom:

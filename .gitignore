@@ -107,5 +107,6 @@ venv.bak/
 weights/vgg16_reducedfc.pth
 # weights/SIXRAY_*.pth
 weights/*
-data/sixray/*
+data/sixray/Image
+data/sixray/Annotation
 eval/*

@@ -54,7 +54,7 @@
 
 
 ## VGG16
-+ SSD基于VGG16，请下载预训练模型文件到`weights/`.
++ SSD基于VGG16，请下载预训练模型文件到`weights/`.  
 [vgg16_reducedfc.pth](https://s3.amazonaws.com/amdegroot-models/)
 
 ## References

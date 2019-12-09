@@ -1,1 +1,0 @@
-python train.py --batch_size 12 --cuda False

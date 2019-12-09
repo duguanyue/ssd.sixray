@@ -108,3 +108,4 @@ weights/vgg16_reducedfc.pth
 # weights/SIXRAY_*.pth
 weights/*
 data/sixray/*
+eval/*

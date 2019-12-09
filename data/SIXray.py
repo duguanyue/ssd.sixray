@@ -42,7 +42,6 @@ class SIXrayAnnotationTransform(object):
 
     def __init__(self, class_to_ind=None, keep_difficult=False):
         self.class_to_ind = class_to_ind or dict(
-            # zip(SIXray_CLASSES, range(len(SIXray_CLASSES))))
             zip(SIXray_CLASSES, range(len(SIXray_CLASSES))))
         self.keep_difficult = keep_difficult
         # 添加的记录所有小类总数
@@ -133,7 +132,7 @@ class SIXrayDetection(data.Dataset):
         self._annopath = osp.join('%s' % self.root, 'Annotation', '%s.txt')
 
         self._imgpath = osp.join('%s' % self.root, 'Image', '%s.TIFF')
-        ###这尼玛还有小写的tiff？
+        # 小写F
         self._imgpath1 = osp.join('%s' % self.root, 'Image', '%s.tiff')
         self._imgpath_jpg = osp.join('%s' % self.root, 'Image', '%s.jpg')
         self.ids = list()
@@ -191,3 +190,67 @@ class SIXrayDetection(data.Dataset):
 
             target = np.hstack((boxes, np.expand_dims(labels, axis=1)))
         return torch.from_numpy(img).permute(2, 0, 1), target, height, width, og_img
+
+    def pull_image(self, index):
+        '''Returns the original image object at index in PIL form
+
+        Note: not using self.__getitem__(), as any transformations passed in
+        could mess up this functionality.
+
+        Argument:
+            index (int): index of img to show
+        Return:
+            PIL img
+        '''
+        img_id = self.ids[index]
+        img = cv2.imread(self._imgpath % img_id, cv2.IMREAD_COLOR)
+        if img is None:
+            img = cv2.imread(self._imgpath1 % img_id, cv2.IMREAD_COLOR)
+        if img is None:
+            img = cv2.imread(self._imgpath_jpg % img_id, cv2.IMREAD_COLOR)
+
+        if img is None:
+            print('\nwrong\n')
+            print(self._imgpath_jpg % img_id, cv2.IMREAD_COLOR)
+
+        return img
+
+    def pull_anno(self, index):
+        '''Returns the original annotation of image at index
+
+        Note: not using self.__getitem__(), as any transformations passed in
+        could mess up this functionality.
+
+        Argument:
+            index (int): index of img to get annotation of
+        Return:
+            list:  [img_id, [(label, bbox coords),...]]
+                eg: ('001718', [('dog', (96, 13, 438, 332))])
+        '''
+
+        img_id = self.ids[index]
+        anno = self._annopath % img_id
+        gt = self.target_transform(anno, 1, 1, img_id)
+
+        res = []
+        # gt = [[173.0, 100.0, 348.0, 350.0, 14] , [173.0, 100.0, 348.0, 350.0, 14]]
+        # 需要转换成 [('label_name', (96, 13, 438, 332))]
+        for tmp in gt:
+            label_idx = tmp[4] - 2
+            label_name = SIXray_CLASSES[label_idx]
+            res.append([label_name, tmp[0:4]])
+
+        return img_id, res
+
+    def pull_tensor(self, index):
+        '''Returns the original image at an index in tensor form
+
+        Note: not using self.__getitem__(), as any transformations passed in
+        could mess up this functionality.
+
+        Argument:
+            index (int): index of img to show
+        Return:
+            tensorized version of img, squeezed
+        '''
+        return torch.Tensor(self.pull_image(index)).unsqueeze_(0)

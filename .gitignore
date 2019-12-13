@@ -109,4 +109,5 @@ weights/vgg16_reducedfc.pth
 weights/*
 data/sixray/Image
 data/sixray/Annotation
+data/eval_sixray/*
 eval/*
